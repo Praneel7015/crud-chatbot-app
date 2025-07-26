@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+// Use in-memory model for testing
+const User = require('../models/UserInMemory');
 const { validateUserData } = require('../middleware/validation');
 
 const userModel = new User();

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const User = require('../models/User');
+// Use in-memory model for testing
+const User = require('../models/UserInMemory');
 
 const userModel = new User();
 
