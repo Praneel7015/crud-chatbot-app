@@ -79,333 +79,647 @@ const internalAPI = {
     }
 };
 
-// Function to analyze user intent using Gemini AI
+// Simple pattern matching for common CRUD operations
+function simpleIntentRecognition(message) {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Help patterns
+    if (lowerMessage.includes('help') || lowerMessage.includes('what can you do') || lowerMessage.includes('how to')) {
+        return {
+            intent: 'help',
+            confidence: 'high',
+            data: {}
+        };
+    }
+    
+    // Create patterns
+    if (lowerMessage.includes('add') || lowerMessage.includes('create') || lowerMessage.includes('new user') || lowerMessage.includes('insert')) {
+        return {
+            intent: 'create',
+            confidence: 'high',
+            data: extractUserData(message)
+        };
+    }
+    
+    // Read patterns
+    if (lowerMessage.includes('show') || lowerMessage.includes('list') || lowerMessage.includes('get') || 
+        lowerMessage.includes('display') || lowerMessage.includes('all users') || lowerMessage.includes('view')) {
+        return {
+            intent: 'read',
+            confidence: 'high',
+            data: extractUserIdentifier(message)
+        };
+    }
+    
+    // Search patterns
+    if (lowerMessage.includes('search') || lowerMessage.includes('find') || lowerMessage.includes('look for')) {
+        return {
+            intent: 'search',
+            confidence: 'high',
+            data: { search_term: extractSearchTerm(message) }
+        };
+    }
+    
+    // Update patterns
+    if (lowerMessage.includes('update') || lowerMessage.includes('edit') || lowerMessage.includes('modify') || 
+        lowerMessage.includes('change')) {
+        return {
+            intent: 'update',
+            confidence: 'high',
+            data: extractUserData(message, true)
+        };
+    }
+    
+    // Delete patterns
+    if (lowerMessage.includes('delete') || lowerMessage.includes('remove') || lowerMessage.includes('destroy')) {
+        return {
+            intent: 'delete',
+            confidence: 'high',
+            data: extractUserIdentifier(message)
+        };
+    }
+    
+    // If no pattern matches, return unknown
+    return {
+        intent: 'unknown',
+        confidence: 'low',
+        data: {}
+    };
+}
+
+// Extract user data from message using simple patterns
+function extractUserData(message, isUpdate = false) {
+    const data = {};
+    
+    // Extract email using regex
+    const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+    if (emailMatch) {
+        data.email = emailMatch[0];
+    }
+    
+    // Extract phone number - look for patterns after "phone" keyword or standalone numbers
+    const phonePatterns = [
+        /(?:phone|number|tel)[\s:]+([+]?[\d\s\-\(\)\.]{10,})/i,
+        /(?:to|is)\s+([+]?[\d\s\-\(\)\.]{10,})(?:\s|$)/i,
+        /(?:phone|tel)\s+([+]?[\d\-\(\)\.]{10,})/i
+    ];
+    
+    for (const pattern of phonePatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+            data.phone_number = match[1].trim();
+            break;
+        }
+    }
+    
+    // Extract name patterns - more careful to avoid email conflicts
+    const namePatterns = [
+        /(?:named?|called?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?=\s|$)/i,
+        /(?:add|create)\s+(?:user\s+)?([A-Z][a-z]+\s+[A-Z][a-z]+)(?=\s+with|\s+email|\s+phone|$)/i,
+        /(?:user|contact|person)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?=\s+with|\s+email|\s+phone|$)/i
+    ];
+    
+    for (const pattern of namePatterns) {
+        const match = message.match(pattern);
+        if (match && match[1] && !match[1].includes('@')) {
+            // Clean up the name by removing trailing email-related words
+            let name = match[1].trim();
+            name = name.replace(/\s+(with|email|phone).*$/i, '');
+            if (name.length > 1) {
+                data.full_name = name;
+                break;
+            }
+        }
+    }
+    
+    // Extract address patterns
+    const addressPatterns = [
+        /(?:address|location|at)\s+"([^"]+)"/i,
+        /(?:address|location|at)\s+(.+?)(?:\s+notes?|$)/i
+    ];
+    
+    for (const pattern of addressPatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+            data.address = match[1].trim();
+            break;
+        }
+    }
+    
+    // Extract user ID
+    const idPatterns = [
+        /user\s+(?:id\s+)?(\d+)/i,
+        /(?:with\s+)?id\s+(\d+)/i
+    ];
+    
+    for (const pattern of idPatterns) {
+        const match = message.match(pattern);
+        if (match) {
+            data.user_id = parseInt(match[1]);
+            break;
+        }
+    }
+    
+    return data;
+}
+
+// Extract user identifier (ID, email, or name) from message
+function extractUserIdentifier(message) {
+    const data = extractUserData(message);
+    
+    // Also check for specific ID patterns
+    const idPatterns = [
+        /user\s+(?:id\s+)?(\d+)/i,
+        /(?:with|id)\s+(\d+)/i
+    ];
+    
+    for (const pattern of idPatterns) {
+        const match = message.match(pattern);
+        if (match) {
+            data.user_id = parseInt(match[1]);
+            break;
+        }
+    }
+    
+    return data;
+}
+
+// Extract search term from message
+function extractSearchTerm(message) {
+    const searchPatterns = [
+        /(?:search|find|look for)\s+(?:users?\s+)?(?:named?|called?)\s+"([^"]+)"/i,
+        /(?:search|find|look for)\s+(?:users?\s+)?(?:named?|called?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+        /(?:search|find|look for)\s+"([^"]+)"/i,
+        /(?:search|find|look for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+        /(?:search|find|look for)\s+(.+?)(?:\s|$)/i
+    ];
+    
+    for (const pattern of searchPatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+            const term = match[1].trim();
+            // Filter out common words that aren't names
+            if (!['users', 'user', 'people', 'contacts', 'for', 'all'].includes(term.toLowerCase())) {
+                return term;
+            }
+        }
+    }
+    
+    // Fallback: extract quoted strings
+    const quotedMatch = message.match(/"([^"]+)"/);
+    if (quotedMatch) {
+        return quotedMatch[1];
+    }
+    
+    // Last resort: extract capitalized words
+    const capitalizedWords = message.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+    if (capitalizedWords && capitalizedWords.length > 0) {
+        return capitalizedWords[capitalizedWords.length - 1];
+    }
+    
+    return '';
+}
+
+// Enhanced intent analysis with fallback to Gemini AI for complex cases
 async function analyzeIntent(userMessage) {
-    // Check if API key is available
-    if (!process.env.GEMINI_API_KEY) {
-        console.error('Gemini API key not configured');
+    // First, try simple pattern matching
+    const simpleResult = simpleIntentRecognition(userMessage);
+    
+    // If we have high confidence, use simple result
+    if (simpleResult.confidence === 'high') {
         return {
-            intent: "unknown",
-            action: "API key not configured",
-            data: {},
-            requires_confirmation: false,
-            response_message: "I'm sorry, but the AI chatbot is not properly configured. Please check that the GEMINI_API_KEY environment variable is set."
+            intent: simpleResult.intent,
+            action: `Direct pattern matching: ${simpleResult.intent}`,
+            data: simpleResult.data,
+            requires_confirmation: simpleResult.intent === 'delete',
+            response_message: generateSimpleResponse(simpleResult.intent, simpleResult.data)
         };
     }
+    
+    // For complex cases, fall back to Gemini AI if available
+    if (process.env.GEMINI_API_KEY) {
+        try {
+            const prompt = `
+            Extract CRUD intent and data from this message: "${userMessage}"
+            
+            Return JSON:
+            {
+                "intent": "create|read|update|delete|search|help|unknown",
+                "data": {
+                    "full_name": "name if found",
+                    "email": "email if found", 
+                    "phone_number": "phone if found",
+                    "address": "address if found",
+                    "user_id": "id if found",
+                    "search_term": "search term if found"
+                }
+            }
+            
+            Be precise and only extract clearly mentioned data.
+            `;
 
-    const prompt = `
-    You are an AI assistant that helps users manage a user database through natural conversation. 
-    Analyze the following user message and determine the intent and extract relevant data.
-
-    User message: "${userMessage}"
-
-    Please respond with a JSON object containing:
-    {
-        "intent": "create|read|update|delete|search|help|unknown",
-        "action": "specific action description",
-        "data": {
-            "full_name": "extracted name if any",
-            "email": "extracted email if any",
-            "phone_number": "extracted phone if any",
-            "address": "extracted address if any",
-            "additional_notes": "extracted notes if any",
-            "search_term": "search term if searching",
-            "user_id": "user id if specified"
-        },
-        "requires_confirmation": true/false,
-        "response_message": "conversational response to the user"
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            const text = response.text();
+            
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const aiResult = JSON.parse(jsonMatch[0]);
+                return {
+                    intent: aiResult.intent,
+                    action: `AI-assisted analysis: ${aiResult.intent}`,
+                    data: aiResult.data || {},
+                    requires_confirmation: aiResult.intent === 'delete',
+                    response_message: generateSimpleResponse(aiResult.intent, aiResult.data)
+                };
+            }
+        } catch (error) {
+            console.error('Gemini AI analysis failed:', error);
+        }
     }
+    
+    // Fallback for unknown intent
+    return {
+        intent: "unknown",
+        action: "Could not determine intent",
+        data: {},
+        requires_confirmation: false,
+        response_message: "I'm not sure what you'd like me to do. Try commands like 'show all users', 'add new user', 'search for John', 'update user 1', or 'delete user with email john@example.com'."
+    };
+}
 
-    Intent definitions:
-    - create: User wants to add a new contact/user
-    - read: User wants to view/list users or get specific user details
-    - update: User wants to modify existing user information
-    - delete: User wants to remove a user
-    - search: User wants to find users by name or other criteria
-    - help: User needs assistance or general information
-    - unknown: Cannot determine intent
-
-    Be conversational and friendly in your response_message. Extract data accurately from natural language.
-    For delete operations, always set requires_confirmation to true.
-    `;
-
-    try {
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-        
-        // Try to parse JSON from the response
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
-        } else {
-            // Fallback if JSON parsing fails
-            return {
-                intent: "unknown",
-                action: "Could not parse intent",
-                data: {},
-                requires_confirmation: false,
-                response_message: "I'm sorry, I didn't understand that. Could you please rephrase your request?"
-            };
-        }
-    } catch (error) {
-        console.error('Error analyzing intent:', error);
-        
-        // Provide more specific error messages
-        let errorMessage = "I'm having trouble understanding your request right now. Please try again.";
-        
-        if (error.message.includes('API_KEY')) {
-            errorMessage = "The AI chatbot is not properly configured. Please check the API key configuration.";
-        } else if (error.message.includes('quota') || error.message.includes('limit')) {
-            errorMessage = "The AI service is currently unavailable due to usage limits. Please try again later.";
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-            errorMessage = "I'm having trouble connecting to the AI service. Please check your internet connection and try again.";
-        }
-        
-        return {
-            intent: "unknown",
-            action: "AI analysis failed",
-            data: {},
-            requires_confirmation: false,
-            response_message: errorMessage
-        };
+// Generate simple response messages for recognized intents
+function generateSimpleResponse(intent, data) {
+    switch (intent) {
+        case 'create':
+            return "I'll help you add a new user. Let me process the information you provided.";
+        case 'read':
+            if (data.user_id) {
+                return `I'll get the details for user ID ${data.user_id}.`;
+            }
+            return "I'll show you all the users in the database.";
+        case 'search':
+            return `I'll search for users matching "${data.search_term}".`;
+        case 'update':
+            return "I'll help you update the user information.";
+        case 'delete':
+            return "I understand you want to delete a user. This action requires confirmation.";
+        case 'help':
+            return "I'm here to help you manage users! Here's what I can do:";
+        default:
+            return "Let me help you with that request.";
     }
 }
 
-// Function to execute the determined action
+// Enhanced executeAction with better error handling and validation
 async function executeAction(intentData) {
     const { intent, data } = intentData;
 
     try {
         switch (intent) {
             case 'create':
-                // Validate required fields
-                if (!data.full_name || !data.email || !data.phone_number) {
-                    return {
-                        success: false,
-                        message: "To create a new user, I need at least a full name, email, and phone number. Could you provide these details?"
-                    };
-                }
-
-                // Check if email already exists
-                const existingUser = await internalAPI.getUserByEmail(data.email);
-                if (existingUser) {
-                    return {
-                        success: false,
-                        message: `A user with the email ${data.email} already exists. Would you like to update their information instead?`
-                    };
-                }
-
-                const newUser = await internalAPI.createUser(data);
-                return {
-                    success: true,
-                    message: `Great! I've successfully added ${newUser.full_name} to the database.`,
-                    data: newUser
-                };
-
+                return await handleCreateUser(data);
             case 'read':
-                if (data.user_id) {
-                    const user = await internalAPI.getUserById(data.user_id);
-                    if (!user) {
-                        return {
-                            success: false,
-                            message: `I couldn't find a user with ID ${data.user_id}.`
-                        };
-                    }
-                    return {
-                        success: true,
-                        message: `Here are the details for ${user.full_name}:`,
-                        data: user
-                    };
-                } else {
-                    const users = await internalAPI.getUsers();
-                    return {
-                        success: true,
-                        message: `I found ${users.length} user(s) in the database:`,
-                        data: users
-                    };
-                }
-
+                return await handleReadUsers(data);
             case 'search':
-                if (!data.search_term) {
-                    return {
-                        success: false,
-                        message: "What name would you like me to search for?"
-                    };
-                }
-
-                const searchResults = await internalAPI.searchUsersByName(data.search_term);
-                if (searchResults.length === 0) {
-                    return {
-                        success: false,
-                        message: `I couldn't find any users matching "${data.search_term}".`
-                    };
-                }
-
-                return {
-                    success: true,
-                    message: `I found ${searchResults.length} user(s) matching "${data.search_term}":`,
-                    data: searchResults
-                };
-
+                return await handleSearchUsers(data);
             case 'update':
-                if (!data.user_id && !data.email) {
-                    return {
-                        success: false,
-                        message: "To update a user, I need either their ID or email address to identify them."
-                    };
-                }
-
-                let userToUpdate;
-                if (data.user_id) {
-                    userToUpdate = await internalAPI.getUserById(data.user_id);
-                } else if (data.email) {
-                    userToUpdate = await internalAPI.getUserByEmail(data.email);
-                }
-
-                if (!userToUpdate) {
-                    return {
-                        success: false,
-                        message: "I couldn't find the user you want to update."
-                    };
-                }
-
-                // Prepare update data (only include fields that were provided)
-                const updateData = {};
-                if (data.full_name) updateData.full_name = data.full_name;
-                if (data.email && data.email !== userToUpdate.email) updateData.email = data.email;
-                if (data.phone_number) updateData.phone_number = data.phone_number;
-                if (data.address !== undefined) updateData.address = data.address;
-                if (data.additional_notes !== undefined) updateData.additional_notes = data.additional_notes;
-
-                // Use existing data for required fields if not provided
-                updateData.full_name = updateData.full_name || userToUpdate.full_name;
-                updateData.email = updateData.email || userToUpdate.email;
-                updateData.phone_number = updateData.phone_number || userToUpdate.phone_number;
-                updateData.address = updateData.address !== undefined ? updateData.address : userToUpdate.address;
-                updateData.additional_notes = updateData.additional_notes !== undefined ? updateData.additional_notes : userToUpdate.additional_notes;
-
-                const updatedUser = await internalAPI.updateUser(userToUpdate.id, updateData);
-                if (!updatedUser) {
-                    return {
-                        success: false,
-                        message: "I encountered an error while updating the user."
-                    };
-                }
-
-                return {
-                    success: true,
-                    message: `I've successfully updated ${updatedUser.full_name}'s information.`,
-                    data: updatedUser
-                };
-
+                return await handleUpdateUser(data);
             case 'delete':
-                if (!data.user_id && !data.email && !data.full_name) {
-                    return {
-                        success: false,
-                        message: "To delete a user, I need either their ID, email, or full name to identify them."
-                    };
-                }
-
-                let userToDelete;
-                if (data.user_id) {
-                    userToDelete = await internalAPI.getUserById(data.user_id);
-                } else if (data.email) {
-                    userToDelete = await internalAPI.getUserByEmail(data.email);
-                } else if (data.full_name) {
-                    const searchResults = await internalAPI.searchUsersByName(data.full_name);
-                    if (searchResults.length === 1) {
-                        userToDelete = searchResults[0];
-                    } else if (searchResults.length > 1) {
-                        return {
-                            success: false,
-                            message: `I found multiple users with that name. Please specify which one by providing their email or ID.`
-                        };
-                    }
-                }
-
-                if (!userToDelete) {
-                    return {
-                        success: false,
-                        message: "I couldn't find the user you want to delete."
-                    };
-                }
-
-                const deleted = await internalAPI.deleteUser(userToDelete.id);
-                if (!deleted) {
-                    return {
-                        success: false,
-                        message: "I encountered an error while deleting the user."
-                    };
-                }
-
-                return {
-                    success: true,
-                    message: `I've successfully deleted ${userToDelete.full_name} from the database.`
-                };
-
+                return await handleDeleteUser(data);
             case 'help':
-                return {
-                    success: true,
-                    message: `I can help you manage users in the database! Here's what I can do:
-
-📝 **Create**: "Add a new contact named John Doe with email john@example.com and phone 555-1234"
-👀 **Read**: "Show me all users" or "Get details for user with ID 5"
-🔍 **Search**: "Find users named Smith" or "Search for John"
-✏️ **Update**: "Update John's phone number to 555-9999"
-🗑️ **Delete**: "Delete the user with email john@example.com"
-
-Just tell me what you'd like to do in natural language, and I'll take care of the rest!`
-                };
-
+                return handleHelp();
             default:
                 return {
                     success: false,
-                    message: "I'm not sure what you'd like me to do. Could you please rephrase your request? You can ask me to create, read, update, delete, or search for users."
+                    message: "I'm not sure what you'd like me to do. Try commands like:\n" +
+                           "• 'show all users' - to view all users\n" +
+                           "• 'add user John Doe with email john@example.com and phone 555-1234'\n" +
+                           "• 'search for Smith' - to find users\n" +
+                           "• 'update user 1 phone to 555-9999'\n" +
+                           "• 'delete user with email john@example.com'"
                 };
         }
     } catch (error) {
         console.error('Error executing action:', error);
         return {
             success: false,
-            message: "I encountered an error while processing your request. Please try again."
+            message: "I encountered an error while processing your request. Please try again or contact support if the issue persists."
         };
     }
 }
 
-// POST /api/chat - Handle chat messages
+// Handle create user with enhanced validation
+async function handleCreateUser(data) {
+    // Validate required fields
+    const missingFields = [];
+    if (!data.full_name) missingFields.push('full name');
+    if (!data.email) missingFields.push('email');
+    if (!data.phone_number) missingFields.push('phone number');
+
+    if (missingFields.length > 0) {
+        return {
+            success: false,
+            message: `To create a new user, I need the following information: ${missingFields.join(', ')}. Please provide these details in your message.`
+        };
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+        return {
+            success: false,
+            message: `The email address "${data.email}" doesn't appear to be valid. Please provide a valid email address.`
+        };
+    }
+
+    // Check if email already exists
+    const existingUser = await internalAPI.getUserByEmail(data.email);
+    if (existingUser) {
+        return {
+            success: false,
+            message: `A user with the email ${data.email} already exists. Would you like to update their information instead?`
+        };
+    }
+
+    try {
+        const newUser = await internalAPI.createUser(data);
+        return {
+            success: true,
+            message: `Great! I've successfully added ${newUser.full_name} to the database.`,
+            data: newUser
+        };
+    } catch (error) {
+        console.error('Create user error:', error);
+        return {
+            success: false,
+            message: "I encountered an error while creating the user. Please check the information and try again."
+        };
+    }
+}
+
+// Handle read users
+async function handleReadUsers(data) {
+    try {
+        if (data.user_id) {
+            const user = await internalAPI.getUserById(data.user_id);
+            if (!user) {
+                return {
+                    success: false,
+                    message: `I couldn't find a user with ID ${data.user_id}.`
+                };
+            }
+            return {
+                success: true,
+                message: `Here are the details for ${user.full_name}:`,
+                data: user
+            };
+        } else {
+            const users = await internalAPI.getUsers();
+            return {
+                success: true,
+                message: `I found ${users.length} user(s) in the database:`,
+                data: users
+            };
+        }
+    } catch (error) {
+        console.error('Read users error:', error);
+        return {
+            success: false,
+            message: "I encountered an error while retrieving user information. Please try again."
+        };
+    }
+}
+
+// Handle search users
+async function handleSearchUsers(data) {
+    if (!data.search_term) {
+        return {
+            success: false,
+            message: "What name would you like me to search for? Please specify a search term."
+        };
+    }
+
+    try {
+        const searchResults = await internalAPI.searchUsersByName(data.search_term);
+        if (searchResults.length === 0) {
+            return {
+                success: false,
+                message: `I couldn't find any users matching "${data.search_term}". Try searching with a different term or check the spelling.`
+            };
+        }
+
+        return {
+            success: true,
+            message: `I found ${searchResults.length} user(s) matching "${data.search_term}":`,
+            data: searchResults
+        };
+    } catch (error) {
+        console.error('Search users error:', error);
+        return {
+            success: false,
+            message: "I encountered an error while searching for users. Please try again."
+        };
+    }
+}
+
+// Handle update user
+async function handleUpdateUser(data) {
+    if (!data.user_id && !data.email) {
+        return {
+            success: false,
+            message: "To update a user, I need either their ID or email address to identify them. Please specify which user you want to update."
+        };
+    }
+
+    try {
+        let userToUpdate;
+        if (data.user_id) {
+            userToUpdate = await internalAPI.getUserById(data.user_id);
+        } else if (data.email) {
+            userToUpdate = await internalAPI.getUserByEmail(data.email);
+        }
+
+        if (!userToUpdate) {
+            return {
+                success: false,
+                message: "I couldn't find the user you want to update. Please check the ID or email address and try again."
+            };
+        }
+
+        // Prepare update data (only include fields that were provided)
+        const updateData = {
+            full_name: data.full_name || userToUpdate.full_name,
+            email: data.email || userToUpdate.email,
+            phone_number: data.phone_number || userToUpdate.phone_number,
+            address: data.address !== undefined ? data.address : userToUpdate.address,
+            additional_notes: data.additional_notes !== undefined ? data.additional_notes : userToUpdate.additional_notes
+        };
+
+        // Validate email format if email is being updated
+        if (data.email && data.email !== userToUpdate.email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(data.email)) {
+                return {
+                    success: false,
+                    message: `The email address "${data.email}" doesn't appear to be valid. Please provide a valid email address.`
+                };
+            }
+        }
+
+        const updatedUser = await internalAPI.updateUser(userToUpdate.id, updateData);
+        if (!updatedUser) {
+            return {
+                success: false,
+                message: "I encountered an error while updating the user. Please try again."
+            };
+        }
+
+        return {
+            success: true,
+            message: `I've successfully updated ${updatedUser.full_name}'s information.`,
+            data: updatedUser
+        };
+    } catch (error) {
+        console.error('Update user error:', error);
+        return {
+            success: false,
+            message: "I encountered an error while updating the user. Please try again."
+        };
+    }
+}
+
+// Handle delete user
+async function handleDeleteUser(data) {
+    if (!data.user_id && !data.email && !data.full_name) {
+        return {
+            success: false,
+            message: "To delete a user, I need either their ID, email, or full name to identify them."
+        };
+    }
+
+    try {
+        let userToDelete;
+        if (data.user_id) {
+            userToDelete = await internalAPI.getUserById(data.user_id);
+        } else if (data.email) {
+            userToDelete = await internalAPI.getUserByEmail(data.email);
+        } else if (data.full_name) {
+            const searchResults = await internalAPI.searchUsersByName(data.full_name);
+            if (searchResults.length === 1) {
+                userToDelete = searchResults[0];
+            } else if (searchResults.length > 1) {
+                return {
+                    success: false,
+                    message: `I found multiple users with that name. Please specify which one by providing their email or ID.`
+                };
+            }
+        }
+
+        if (!userToDelete) {
+            return {
+                success: false,
+                message: "I couldn't find the user you want to delete. Please check the details and try again."
+            };
+        }
+
+        const deleted = await internalAPI.deleteUser(userToDelete.id);
+        if (!deleted) {
+            return {
+                success: false,
+                message: "I encountered an error while deleting the user. Please try again."
+            };
+        }
+
+        return {
+            success: true,
+            message: `I've successfully deleted ${userToDelete.full_name} from the database.`
+        };
+    } catch (error) {
+        console.error('Delete user error:', error);
+        return {
+            success: false,
+            message: "I encountered an error while deleting the user. Please try again."
+        };
+    }
+}
+
+// Handle help request
+function handleHelp() {
+    return {
+        success: true,
+        message: `I can help you manage users in the database! Here's what I can do:
+
+📝 **Create Users**: "Add a new user named John Doe with email john@example.com and phone 555-1234"
+👀 **View Users**: "Show me all users" or "Get user with ID 5"
+🔍 **Search Users**: "Find users named Smith" or "Search for John"
+✏️ **Update Users**: "Update user 1 phone to 555-9999" or "Change John's email to newemail@example.com"
+🗑️ **Delete Users**: "Delete user with email john@example.com" (requires confirmation)
+
+Just tell me what you'd like to do in natural language, and I'll take care of the rest!
+
+**Tips:**
+• Be specific with user details (name, email, phone)
+• Use "user ID" or email to identify users for updates/deletes
+• All delete operations require confirmation for safety`
+    };
+}
+
+// POST /api/chat - Handle chat messages with simplified processing
 router.post('/', async (req, res) => {
     try {
-        const { message, confirm_action } = req.body;
+        const { message, confirm_action, intent_data } = req.body;
 
         if (!message || message.trim().length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Message is required'
+                error: 'Message is required',
+                message: 'Please provide a message to process.'
             });
         }
 
-        // Analyze user intent using Gemini AI
-        const intentData = await analyzeIntent(message.trim());
+        let intentResult;
 
-        // Handle confirmation for delete operations
-        if (intentData.intent === 'delete' && intentData.requires_confirmation && !confirm_action) {
+        // Handle confirmation responses
+        if (confirm_action && intent_data) {
+            // User is responding to a confirmation request
+            const confirmMessage = message.toLowerCase().trim();
+            const isConfirmed = confirmMessage.includes('yes') || confirmMessage.includes('confirm') || 
+                               confirmMessage.includes('proceed') || confirmMessage.includes('ok');
+            
+            if (!isConfirmed) {
+                return res.json({
+                    success: true,
+                    message: "Okay, I've cancelled that action. Is there anything else I can help you with?",
+                    requires_confirmation: false
+                });
+            }
+            
+            // Execute the confirmed action
+            intentResult = intent_data;
+        } else {
+            // Analyze the user's intent
+            intentResult = await analyzeIntent(message.trim());
+        }
+
+        // Handle confirmation requirement for delete operations
+        if (intentResult.intent === 'delete' && intentResult.requires_confirmation && !confirm_action) {
             return res.json({
                 success: true,
-                message: intentData.response_message + " Please confirm that you want to proceed with the deletion.",
+                message: intentResult.response_message + " Please confirm that you want to proceed with the deletion by typing 'yes' or 'confirm'.",
                 requires_confirmation: true,
-                intent_data: intentData
+                intent_data: intentResult
             });
         }
 
-        // Execute the action
-        const result = await executeAction(intentData);
+        // Execute the action directly
+        const result = await executeAction(intentResult);
 
         res.json({
             success: result.success,
             message: result.message,
             data: result.data || null,
-            intent: intentData.intent,
+            intent: intentResult.intent,
             requires_confirmation: false
         });
 
@@ -415,45 +729,6 @@ router.post('/', async (req, res) => {
             success: false,
             error: 'Failed to process chat message',
             message: 'I encountered an error while processing your request. Please try again.'
-        });
-    }
-});
-
-// POST /api/chat/confirm - Handle confirmation for actions that require it
-router.post('/confirm', async (req, res) => {
-    try {
-        const { intent_data, confirmed } = req.body;
-
-        if (!intent_data) {
-            return res.status(400).json({
-                success: false,
-                error: 'Intent data is required for confirmation'
-            });
-        }
-
-        if (!confirmed) {
-            return res.json({
-                success: true,
-                message: "Okay, I've cancelled that action. Is there anything else I can help you with?"
-            });
-        }
-
-        // Execute the confirmed action
-        const result = await executeAction(intent_data);
-
-        res.json({
-            success: result.success,
-            message: result.message,
-            data: result.data || null,
-            intent: intent_data.intent
-        });
-
-    } catch (error) {
-        console.error('Error confirming action:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to confirm action',
-            message: 'I encountered an error while processing your confirmation. Please try again.'
         });
     }
 });

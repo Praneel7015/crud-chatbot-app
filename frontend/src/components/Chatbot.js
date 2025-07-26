@@ -30,8 +30,8 @@ const Chatbot = ({ onRefreshUsers }) => {
     }, []);
 
     // Handle sending message
-    const handleSendMessage = async (message = inputMessage.trim(), confirmAction = false) => {
-        if (!message && !confirmAction) return;
+    const handleSendMessage = async (message = inputMessage.trim(), isConfirmation = false) => {
+        if (!message && !isConfirmation) return;
 
         const userMessage = {
             id: Date.now(),
@@ -40,24 +40,19 @@ const Chatbot = ({ onRefreshUsers }) => {
             timestamp: new Date()
         };
 
-        // Add user message to chat (only if not confirmation)
-        if (!confirmAction) {
-            setMessages(prev => [...prev, userMessage]);
-            setInputMessage('');
-        }
-        
+        // Add user message to chat
+        setMessages(prev => [...prev, userMessage]);
+        setInputMessage('');
         setIsLoading(true);
 
         try {
-            const endpoint = confirmAction ? '/api/chat/confirm' : '/api/chat';
-            const payload = confirmAction 
-                ? { 
-                    intent_data: pendingConfirmation.intent_data, 
-                    confirmed: message.toLowerCase().includes('yes') || message.toLowerCase().includes('confirm')
-                }
-                : { message };
+            const payload = {
+                message,
+                confirm_action: isConfirmation && pendingConfirmation !== null,
+                intent_data: isConfirmation ? pendingConfirmation.intent_data : undefined
+            };
 
-            const response = await fetch(`http://localhost:5000${endpoint}`, {
+            const response = await fetch('http://localhost:5000/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -110,9 +105,8 @@ const Chatbot = ({ onRefreshUsers }) => {
 
     // Handle confirmation response
     const handleConfirmation = (confirmed) => {
-        const response = confirmed ? 'Yes, please proceed.' : 'No, cancel that action.';
+        const response = confirmed ? 'yes, proceed' : 'no, cancel';
         handleSendMessage(response, true);
-        setPendingConfirmation(null);
     };
 
     // Handle input key press
