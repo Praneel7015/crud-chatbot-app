@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const User = require('../models/User');
+// Use in-memory model for testing
+const User = require('../models/UserInMemory');
 
 const userModel = new User();
 
@@ -73,7 +74,128 @@ const internalAPI = {
     }
 };
 
-// Function to analyze user intent using Gemini AI
+// Fallback intent analysis when AI is not available
+function analyzeIntentFallback(userMessage) {
+    const message = userMessage.toLowerCase().trim();
+    
+    // Help patterns
+    if (message.includes('help') || message.includes('what can you do') || message.includes('assist')) {
+        return {
+            intent: "help",
+            action: "User requested help",
+            data: {},
+            requires_confirmation: false,
+            response_message: "I can help you manage users in the database!"
+        };
+    }
+    
+    // Create patterns
+    if (message.includes('add') || message.includes('create') || message.includes('new user') || message.includes('register')) {
+        // Try to extract basic data
+        const emailMatch = userMessage.match(/[\w.-]+@[\w.-]+\.\w+/);
+        const phoneMatch = userMessage.match(/[\+]?[\d\s\-\(\)]{7,}/);
+        
+        // Try to extract name - look for patterns like "named X" or "user X"
+        let fullName = null;
+        if (userMessage.toLowerCase().includes('named ')) {
+            const nameStart = userMessage.toLowerCase().indexOf('named ') + 6;
+            const withPart = userMessage.toLowerCase().indexOf(' with', nameStart);
+            if (withPart > nameStart) {
+                fullName = userMessage.substring(nameStart, withPart).trim();
+            }
+        } else if (userMessage.toLowerCase().includes('user ')) {
+            const nameStart = userMessage.toLowerCase().indexOf('user ') + 5;
+            const withPart = userMessage.toLowerCase().indexOf(' with', nameStart);
+            if (withPart > nameStart) {
+                fullName = userMessage.substring(nameStart, withPart).trim();
+            }
+        }
+        
+        console.log(`[Chatbot] Parsed create data - Name: "${fullName}", Email: "${emailMatch ? emailMatch[0] : null}", Phone: "${phoneMatch ? phoneMatch[0].trim() : null}"`);
+        
+        return {
+            intent: "create",
+            action: "Create new user",
+            data: {
+                full_name: fullName,
+                email: emailMatch ? emailMatch[0] : null,
+                phone_number: phoneMatch ? phoneMatch[0].trim() : null,
+                address: null,
+                additional_notes: null
+            },
+            requires_confirmation: false,
+            response_message: "I can help you create a new user. Please provide the full name, email, and phone number."
+        };
+    }
+    
+    // Read/List patterns
+    if (message.includes('show') || message.includes('list') || message.includes('all users') || message.includes('view') || message.includes('get')) {
+        return {
+            intent: "read",
+            action: "List all users",
+            data: {},
+            requires_confirmation: false,
+            response_message: "I'll show you all the users in the database."
+        };
+    }
+    
+    // Search patterns
+    if (message.includes('search') || message.includes('find') || message.includes('look for')) {
+        // Try to extract search term - look for words after search/find keywords
+        let searchTerm = null;
+        
+        if (message.includes('search for ')) {
+            searchTerm = userMessage.substring(userMessage.toLowerCase().indexOf('search for ') + 11).trim();
+        } else if (message.includes('find ')) {
+            searchTerm = userMessage.substring(userMessage.toLowerCase().indexOf('find ') + 5).trim();
+        } else if (message.includes('look for ')) {
+            searchTerm = userMessage.substring(userMessage.toLowerCase().indexOf('look for ') + 9).trim();
+        }
+        
+        return {
+            intent: "search",
+            action: "Search users",
+            data: {
+                search_term: searchTerm
+            },
+            requires_confirmation: false,
+            response_message: searchTerm ? `I'll search for users matching "${searchTerm}".` : "What name would you like me to search for?"
+        };
+    }
+    
+    // Update patterns
+    if (message.includes('update') || message.includes('edit') || message.includes('modify') || message.includes('change')) {
+        return {
+            intent: "update",
+            action: "Update user",
+            data: {},
+            requires_confirmation: false,
+            response_message: "I can help you update a user. Please specify which user and what information you'd like to change."
+        };
+    }
+    
+    // Delete patterns
+    if (message.includes('delete') || message.includes('remove') || message.includes('erase')) {
+        return {
+            intent: "delete",
+            action: "Delete user",
+            data: {},
+            requires_confirmation: true,
+            response_message: "I can help you delete a user. Please specify which user you'd like to remove."
+        };
+    }
+    
+    // Default unknown
+    return {
+        intent: "unknown",
+        action: "Could not determine intent",
+        data: {},
+        requires_confirmation: false,
+        response_message: "I'm not sure what you'd like me to do. You can ask me to create, read, update, delete, or search for users. Type 'help' for more information."
+    };
+}
+
+// Function to analyze user intent using Gemini AI with fallback
 async function analyzeIntent(userMessage) {
     const prompt = `
     You are an AI assistant that helps users manage a user database through natural conversation. 
@@ -112,33 +234,27 @@ async function analyzeIntent(userMessage) {
     `;
 
     try {
+        console.log(`[Chatbot] Attempting AI analysis for: "${userMessage}"`);
         const result = await model.generateContent(prompt);
         const response = result.response;
         const text = response.text();
         
+        console.log(`[Chatbot] AI response received: ${text.substring(0, 100)}...`);
+        
         // Try to parse JSON from the response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
+            const parsed = JSON.parse(jsonMatch[0]);
+            console.log(`[Chatbot] AI analysis successful, intent: ${parsed.intent}`);
+            return parsed;
         } else {
-            // Fallback if JSON parsing fails
-            return {
-                intent: "unknown",
-                action: "Could not parse intent",
-                data: {},
-                requires_confirmation: false,
-                response_message: "I'm sorry, I didn't understand that. Could you please rephrase your request?"
-            };
+            console.log('[Chatbot] Could not parse JSON from AI response, using fallback');
+            return analyzeIntentFallback(userMessage);
         }
     } catch (error) {
-        console.error('Error analyzing intent:', error);
-        return {
-            intent: "unknown",
-            action: "AI analysis failed",
-            data: {},
-            requires_confirmation: false,
-            response_message: "I'm having trouble understanding your request right now. Please try again."
-        };
+        console.error(`[Chatbot] Error analyzing intent with AI: ${error.message}`);
+        console.log('[Chatbot] Using fallback intent analysis...');
+        return analyzeIntentFallback(userMessage);
     }
 }
 
