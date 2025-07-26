@@ -520,19 +520,17 @@ body {
     text-align: center;
     color: var(--text-secondary);
 }
-    color: #718096;
-}
 
 .empty-state i {
     font-size: 4rem;
     margin-bottom: 1rem;
-    color: #cbd5e0;
+    color: var(--table-border);
 }
 
 .empty-state h3 {
     font-size: 1.5rem;
     margin-bottom: 0.5rem;
-    color: #4a5568;
+    color: var(--text-accent);
 }
 
 .delete-message {

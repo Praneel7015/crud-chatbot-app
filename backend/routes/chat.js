@@ -93,15 +93,33 @@ function analyzeIntentFallback(userMessage) {
     if (message.includes('add') || message.includes('create') || message.includes('new user') || message.includes('register')) {
         // Try to extract basic data
         const emailMatch = userMessage.match(/[\w.-]+@[\w.-]+\.\w+/);
-        const phoneMatch = userMessage.match(/[\+]?[\d\s\-\(\)]{10,}/);
+        const phoneMatch = userMessage.match(/[\+]?[\d\s\-\(\)]{7,}/);
+        
+        // Try to extract name - look for patterns like "named X" or "user X"
+        let fullName = null;
+        if (userMessage.toLowerCase().includes('named ')) {
+            const nameStart = userMessage.toLowerCase().indexOf('named ') + 6;
+            const withPart = userMessage.toLowerCase().indexOf(' with', nameStart);
+            if (withPart > nameStart) {
+                fullName = userMessage.substring(nameStart, withPart).trim();
+            }
+        } else if (userMessage.toLowerCase().includes('user ')) {
+            const nameStart = userMessage.toLowerCase().indexOf('user ') + 5;
+            const withPart = userMessage.toLowerCase().indexOf(' with', nameStart);
+            if (withPart > nameStart) {
+                fullName = userMessage.substring(nameStart, withPart).trim();
+            }
+        }
+        
+        console.log(`[Chatbot] Parsed create data - Name: "${fullName}", Email: "${emailMatch ? emailMatch[0] : null}", Phone: "${phoneMatch ? phoneMatch[0].trim() : null}"`);
         
         return {
             intent: "create",
             action: "Create new user",
             data: {
+                full_name: fullName,
                 email: emailMatch ? emailMatch[0] : null,
-                phone_number: phoneMatch ? phoneMatch[0].replace(/\s/g, '') : null,
-                full_name: null,
+                phone_number: phoneMatch ? phoneMatch[0].trim() : null,
                 address: null,
                 additional_notes: null
             },
