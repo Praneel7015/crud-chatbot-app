@@ -31,8 +31,10 @@ A modern, production-ready full-stack web application that provides two distinct
 - **Responsive Design**: Works perfectly on desktop, tablet, and mobile devices
 - **Real-time Updates**: Live synchronization between interfaces
 - **Professional UI**: Modern gradient design with smooth animations
+- **Dark/Light Mode**: Toggle between dark and light themes with persistent storage
+- **Secure API Configuration**: Environment-based API key management
 
-> **Note**: Dark/light mode toggle functionality is planned for future implementation. Currently, the application uses a modern light theme with gradient backgrounds.
+> **Note**: The application now includes a fully functional dark/light mode toggle with theme persistence across sessions. Users can switch between themes using the toggle button in the header.
 
 ## 🛠 Technology Stack
 
@@ -112,7 +114,7 @@ npm install
 cp .env.example .env
 ```
 
-2. Edit the `.env` file with your database credentials:
+2. Edit the `.env` file with your configuration:
 ```env
 # Database Configuration
 DB_HOST=localhost
@@ -123,11 +125,16 @@ DB_NAME=crud_chatbot_db
 # Server Configuration
 PORT=5000
 NODE_ENV=development
+
+# Google Gemini AI API Key (Required for chatbot functionality)
+GEMINI_API_KEY=your_actual_gemini_api_key_here
 ```
 
-**Important**: Replace `your_mysql_password` with your actual MySQL password.
-
-**Note**: The Google Gemini AI API key is currently hardcoded in the application for demo purposes. In a production environment, you should move this to an environment variable for security.
+**Important Notes:**
+- Replace `your_mysql_password` with your actual MySQL password
+- **You must obtain a Google Gemini API key** from [Google AI Studio](https://makersuite.google.com/app/apikey) and replace `your_actual_gemini_api_key_here` with your actual API key
+- The chatbot functionality will not work without a valid API key
+- The application includes comprehensive error handling for missing or invalid API keys
 
 #### Start the Backend Server
 ```bash
@@ -173,6 +180,33 @@ The frontend application will start on `http://localhost:3000`
 
 3. **Frontend Application**: Visit `http://localhost:3000`
    - You should see the application homepage with both form and chatbot interfaces
+
+## 🎨 Dark/Light Mode
+
+The application includes a fully functional dark/light mode toggle with the following features:
+
+### Theme Toggle
+- **Location**: Top-right corner of the header
+- **Icon**: Sun (🌞) for light mode, Moon (🌙) for dark mode  
+- **Animation**: Smooth transitions between themes
+- **Responsive**: Works on all screen sizes
+
+### Theme Persistence
+- **Local Storage**: Theme preference is automatically saved
+- **Session Persistence**: Your theme choice persists across browser sessions
+- **Automatic Application**: Theme is applied immediately on page load
+
+### Comprehensive Theming
+- **All Components**: Every interface element supports both themes
+- **Form Interface**: Complete theming for forms, tables, and buttons
+- **Chatbot Interface**: Full dark mode support for chat messages and interface
+- **Consistent Colors**: Carefully selected color palette for optimal readability
+- **Smooth Transitions**: 0.3s CSS transitions for seamless theme switching
+
+### Usage
+1. Click the theme toggle button in the top-right corner of the header
+2. The theme will immediately switch and be saved automatically
+3. Your preference will be remembered when you return to the application
 
 ## 🎯 Usage Guide
 
@@ -376,12 +410,11 @@ crud-chatbot-app/
 - SQL injection prevention through parameterized queries
 - CORS configuration for cross-origin requests
 - Error handling without exposing sensitive information
-- **Note**: Google Gemini API key is currently hardcoded for demo purposes
+- **Secure API Key Management**: Google Gemini API key stored in environment variables
+- Comprehensive error handling for API failures
 
 ### Production Recommendations
-- **API Key Security**: Move the Gemini API key to environment variables
 - Add authentication and authorization
-- Use environment variables for all sensitive data
 - Implement rate limiting for API endpoints
 - Add HTTPS encryption
 - Set up proper logging and monitoring
@@ -390,20 +423,18 @@ crud-chatbot-app/
 - Consider API key rotation policies
 - Add request validation middleware
 
-### Google Gemini API Key Setup (For Production)
-If you want to use your own Gemini API key:
+### Google Gemini API Key Setup
+To use the chatbot functionality, you **must** obtain an API key:
 
-1. Get an API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Add it to your `.env` file:
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Create a new API key
+3. Add it to your `.env` file:
 ```env
 GEMINI_API_KEY=your_actual_api_key_here
 ```
-3. Update the code in `backend/routes/chat.js` to use the environment variable:
-```javascript
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-```
+4. Restart the backend server
 
-**Current Demo Key**: The application includes a demo API key for immediate testing, but this should be replaced with your own key for production use.
+**Important**: The chatbot will display helpful error messages if the API key is missing or invalid, guiding you through the setup process.
 
 ## 🚀 Deployment
 
@@ -456,12 +487,13 @@ We welcome contributions to improve this CRUD chatbot application! Here's how yo
 
 ### Areas for Contribution
 - **UI/UX Improvements**: Enhanced styling, animations, or user experience
-- **Dark/Light Mode**: Implementation of theme switching functionality
 - **Security Enhancements**: Better API key management, input validation
 - **Testing**: Unit tests, integration tests
 - **Performance**: Database optimization, caching
 - **Features**: New CRUD operations, advanced search, user roles
 - **Documentation**: Improved guides, tutorials, API documentation
+- **Accessibility**: Better screen reader support, keyboard navigation
+- **Mobile Experience**: Enhanced responsive design for mobile devices
 
 ## 📝 License
 

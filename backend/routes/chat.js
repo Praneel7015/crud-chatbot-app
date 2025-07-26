@@ -5,8 +5,14 @@ const User = require('../models/User');
 
 const userModel = new User();
 
-// Initialize Gemini AI with the provided API key
-const genAI = new GoogleGenerativeAI('AIzaSyCGiFZ3sKkURBN3ajveL34e56Zpd0JNc0c');
+// Initialize Gemini AI with API key from environment variables
+if (!process.env.GEMINI_API_KEY) {
+    console.error('ERROR: GEMINI_API_KEY environment variable is not set.');
+    console.error('Please add your Google Gemini API key to your .env file.');
+    console.error('You can get an API key from: https://makersuite.google.com/app/apikey');
+}
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
 // Internal API helper functions
@@ -75,6 +81,18 @@ const internalAPI = {
 
 // Function to analyze user intent using Gemini AI
 async function analyzeIntent(userMessage) {
+    // Check if API key is available
+    if (!process.env.GEMINI_API_KEY) {
+        console.error('Gemini API key not configured');
+        return {
+            intent: "unknown",
+            action: "API key not configured",
+            data: {},
+            requires_confirmation: false,
+            response_message: "I'm sorry, but the AI chatbot is not properly configured. Please check that the GEMINI_API_KEY environment variable is set."
+        };
+    }
+
     const prompt = `
     You are an AI assistant that helps users manage a user database through natural conversation. 
     Analyze the following user message and determine the intent and extract relevant data.
@@ -132,12 +150,24 @@ async function analyzeIntent(userMessage) {
         }
     } catch (error) {
         console.error('Error analyzing intent:', error);
+        
+        // Provide more specific error messages
+        let errorMessage = "I'm having trouble understanding your request right now. Please try again.";
+        
+        if (error.message.includes('API_KEY')) {
+            errorMessage = "The AI chatbot is not properly configured. Please check the API key configuration.";
+        } else if (error.message.includes('quota') || error.message.includes('limit')) {
+            errorMessage = "The AI service is currently unavailable due to usage limits. Please try again later.";
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMessage = "I'm having trouble connecting to the AI service. Please check your internet connection and try again.";
+        }
+        
         return {
             intent: "unknown",
             action: "AI analysis failed",
             data: {},
             requires_confirmation: false,
-            response_message: "I'm having trouble understanding your request right now. Please try again."
+            response_message: errorMessage
         };
     }
 }
