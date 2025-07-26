@@ -10,6 +10,33 @@ const App = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('form');
+    const [isDarkMode, setIsDarkMode] = useState(false);
+
+    // Load theme preference from localStorage on component mount
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            setIsDarkMode(true);
+            document.body.classList.add('dark-mode');
+        } else {
+            setIsDarkMode(false);
+            document.body.classList.remove('dark-mode');
+        }
+    }, []);
+
+    // Toggle dark mode
+    const toggleDarkMode = () => {
+        const newDarkMode = !isDarkMode;
+        setIsDarkMode(newDarkMode);
+        
+        if (newDarkMode) {
+            document.body.classList.add('dark-mode');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.body.classList.remove('dark-mode');
+            localStorage.setItem('theme', 'light');
+        }
+    };
 
     // Fetch users from the API
     const fetchUsers = async () => {
@@ -80,11 +107,21 @@ const App = () => {
         <div className="app">
             <header className="app-header">
                 <div className="header-content">
-                    <h1>
-                        <i className="fas fa-users"></i>
-                        User Management System
-                    </h1>
-                    <p>Manage your contacts with our intuitive form interface or chat with our AI assistant</p>
+                    <div className="header-main">
+                        <h1>
+                            <i className="fas fa-users"></i>
+                            User Management System
+                        </h1>
+                        <p>Manage your contacts with our intuitive form interface or chat with our AI assistant</p>
+                    </div>
+                    <button 
+                        className="theme-toggle"
+                        onClick={toggleDarkMode}
+                        title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    >
+                        <i className={isDarkMode ? 'fas fa-sun' : 'fas fa-moon'}></i>
+                        {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                    </button>
                 </div>
             </header>
 
